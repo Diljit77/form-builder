@@ -1,7 +1,7 @@
 import { useState } from "react";
 import API from "../api/axios";
-import { useNavigate } from "react-router-dom";
-import { useThemeStore } from "../store/useAuthStore";
+import { Link, useNavigate } from "react-router-dom";
+import { useThemeStore } from "../store/usethemeStore";
 
 interface SignupForm {
   name: string;
@@ -54,6 +54,15 @@ export default function Signup() {
           onChange={handleChange}
         />
         <button className="btn btn-primary w-full">Signup</button>
+     <p className="text-center text-sm text-gray-600">
+  Already have an account?{" "}
+  <Link
+    to="/login"
+    className="link link-primary hover:underline"
+  >
+    login
+  </Link>
+</p>
       </form>
     </div>
   );

@@ -2,12 +2,53 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import API from "../api/axios";
-import type { Form, Question } from "../types/From";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import type { DropResult } from "@hello-pangea/dnd";
-import { useThemeStore } from "../store/useAuthStore";
+import { useThemeStore } from "../store/usethemeStore";
+import { ImageIcon, X } from "lucide-react";
 
-// Custom scroll behavior during drag
+interface Category {
+  id: string;
+  label: string;
+}
+
+interface Item {
+  id: string;
+  label: string;
+  belongsTo?: string;
+}
+
+interface SubQuestion {
+  id: string;
+  question: string;
+  options: string[];
+}
+
+interface QuestionConfig {
+  categories?: Category[];
+  items?: Item[];
+  textWithBlanks?: string;
+  options?: string[];
+  passage?: string;
+  subQuestions?: SubQuestion[];
+  imageUrl?: string;
+}
+
+interface Question {
+  qid: string;
+  type: 'cloze' | 'categorize' | 'comprehension';
+  title: string;
+  config: QuestionConfig;
+}
+
+interface Form {
+  _id?: string;
+  title: string;
+  description: string;
+  headerImageUrl?: string;
+  questions: Question[];
+}
+
 const scrollOnDrag = (e: MouseEvent) => {
   const { clientY } = e;
   const buffer = 100;
@@ -26,7 +67,7 @@ const scrollOnDrag = (e: MouseEvent) => {
 };
 
 export default function Editor() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { theme } = useThemeStore();
   const [form, setForm] = useState<Form>({
@@ -36,10 +77,11 @@ export default function Editor() {
     questions: [],
   });
   const [loading, setLoading] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
 
   useEffect(() => {
     if (id) {
-      API.get(`/forms/${id}`)
+      API.get<Form>(`/forms/${id}`)
         .then((res) => setForm(res.data))
         .catch(() => alert("Failed to load form"));
     }
@@ -50,9 +92,7 @@ export default function Editor() {
     return () => window.removeEventListener('mousemove', scrollOnDrag);
   }, []);
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => setForm({ ...form, [e.target.name]: e.target.value });
+
 
   const addQuestion = () => {
     const newQ: Question = {
@@ -78,7 +118,7 @@ export default function Editor() {
     setForm({ ...form, questions: form.questions.filter((_, i) => i !== index) });
   };
 
-  const reorder = (list: any[], startIndex: number, endIndex: number) => {
+  const reorder = <T,>(list: T[], startIndex: number, endIndex: number): T[] => {
     const result = [...list];
     const [removed] = result.splice(startIndex, 1);
     result.splice(endIndex, 0, removed);
@@ -98,7 +138,7 @@ export default function Editor() {
       return;
     }
 
-    const [listType, qid] = source.droppableId.split("::");
+    const [listType, qid] = source.droppableId.split("::") as [string, string];
     const qIndex = form.questions.findIndex((q) => q.qid === qid);
     if (qIndex === -1) return;
 
@@ -121,6 +161,45 @@ export default function Editor() {
     handleQuestionChange(qIndex, "config", config);
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, qIndex?: number) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImageUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const response = await API.post('/upload', formData);
+      const imageUrl = response.data.url;
+
+      if (qIndex !== undefined) {
+        handleQuestionChange(qIndex, "config", {
+          ...form.questions[qIndex].config,
+          imageUrl
+        });
+      } else {
+        setForm(prev => ({ ...prev, headerImageUrl: imageUrl }));
+      }
+    } catch (error) {
+      alert("Image upload failed");
+    } finally {
+      setImageUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const removeImage = (qIndex?: number) => {
+    if (qIndex !== undefined) {
+      handleQuestionChange(qIndex, "config", {
+        ...form.questions[qIndex].config,
+        imageUrl: undefined
+      });
+    } else {
+      setForm(prev => ({ ...prev, headerImageUrl: undefined }));
+    }
+  };
+
   const saveForm = async () => {
     if (!form.title) return alert("Title is required");
     setLoading(true);
@@ -139,7 +218,6 @@ export default function Editor() {
     }
   };
 
-  // Drag handle icon component
   const DragHandle = () => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-gray-500">
       <path d="M8 7H12M8 12H16M8 17H12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -150,21 +228,69 @@ export default function Editor() {
     <div data-theme={theme} className="pb-8">
       <h1 className="text-2xl font-bold">{id ? "Edit Form" : "Create Form"}</h1>
 
-      <input
-        className="input input-bordered w-full mt-4"
-        name="title"
-        placeholder="Form Title"
-        value={form.title}
-        onChange={handleChange}
-      />
+      <div className="relative">
+     {/* Form Title */}
+<input
+  type="text"
+  value={form.title}
+  onChange={(e) => setForm({ ...form, title: e.target.value })}
+  placeholder="Form Title"
+  className="input input-bordered w-full mb-3"
+/>
 
-      <textarea
-        className="textarea textarea-bordered w-full mt-2"
-        name="description"
-        placeholder="Form Description"
-        value={form.description}
-        onChange={handleChange}
-      />
+
+<textarea
+  value={form.description || ""}
+  onChange={(e) => setForm({ ...form, description: e.target.value })}
+  placeholder="Form Description (Optional)"
+  className="textarea textarea-bordered w-full mb-3"
+/>
+<div className="flex items-center gap-3 mb-4">
+  {form.headerImageUrl ? (
+<div className="relative w-full max-w-2xl mx-auto bg-base-200 rounded-lg overflow-hidden shadow-md">
+  <img
+    src={form.headerImageUrl}
+    alt="Header Preview"
+    className="w-full h-56 object-cover"
+  />
+  <button
+    type="button"
+    onClick={() => setForm({ ...form, headerImageUrl: "" })}
+    className="absolute top-2 right-2 btn btn-circle btn-xs btn-error"
+  >
+    ✕
+  </button>
+</div>
+
+  ) : (
+    <button
+      type="button"
+      className="btn btn-outline btn-sm"
+      onClick={async () => {
+        const fileInput = document.createElement("input");
+        fileInput.type = "file";
+        fileInput.accept = "image/*";
+        fileInput.onchange = async (e: any) => {
+          const file = e.target.files[0];
+          if (!file) return;
+
+          const formData = new FormData();
+          formData.append("image", file);
+
+          const res = await API.post("/upload", formData, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+
+          setForm({ ...form, headerImageUrl: res.data.url });
+        };
+        fileInput.click();
+      }}
+    >
+      📷 Add Header Image
+    </button>
+  )}
+</div>
+</div>
 
       <button className="btn btn-neutral mt-4" onClick={addQuestion}>
         + Add Question
@@ -201,13 +327,45 @@ export default function Editor() {
                         <DragHandle />
                         <span>Drag to reorder</span>
                       </div>
+<div className="flex items-center gap-2 mb-2">
+  <input
+    className="input input-bordered flex-1"
+    value={q.title}
+    onChange={(e) => handleQuestionChange(qIndex, "title", e.target.value)}
+    placeholder="Question Title"
+  />
+  <label className="cursor-pointer">
+    <input
+      type="file"
+      accept="image/*"
+      className="hidden"
+      onChange={(e) => handleImageUpload(e, qIndex)}
+      disabled={imageUploading}
+    />
+    {q.config.imageUrl ? (
+      <div className="flex items-center gap-1">
+        <img 
+          src={q.config.imageUrl} 
+          alt="Question" 
+          className="h-8 w-8 object-cover rounded"
+        />
+        <button 
+          type="button"
+          onClick={() => removeImage(qIndex)}
+          className="btn btn-circle btn-xs"
+          disabled={imageUploading}
+        >
+          <X size={12} />
+        </button>
+      </div>
+    ) : (
+      <ImageIcon size={20} className={`text-gray-500 ${imageUploading ? 'opacity-50' : 'hover:text-primary'}`} />
+    )}
+  </label>
+</div>
 
-                      <input
-                        className="input input-bordered w-full mb-2"
-                        value={q.title}
-                        onChange={(e) => handleQuestionChange(qIndex, "title", e.target.value)}
-                        placeholder="Question Title"
-                      />
+
+
 
                       <select
                         className="select select-bordered w-full mb-4"
@@ -220,8 +378,15 @@ export default function Editor() {
                         <option value="categorize">Categorize</option>
                         <option value="comprehension">Comprehension</option>
                       </select>
-
-                      {/* Categorize Question Type */}
+{q.config.imageUrl && (
+  <div className="mt-2 mb-4">
+<img
+  src={q.config.imageUrl}
+  alt="Preview"
+  className="rounded-lg border border-gray-600 max-h-72 object-contain mx-auto"
+/>
+  </div>
+)}
                       {q.type === "categorize" && (
                         <div className="space-y-4">
                           <div>
@@ -413,9 +578,8 @@ export default function Editor() {
                         </div>
                       )}
 
-                      {/* Cloze Question Type */}
                       {q.type === "cloze" && (
-                        <div>
+                          <div>
                           <h3 className="font-bold mb-2">Sentence</h3>
                           <textarea
                             id={`cloze-text-${q.qid}`}
@@ -529,7 +693,6 @@ export default function Editor() {
                         </div>
                       )}
 
-                      {/* Comprehension Question Type */}
                       {q.type === "comprehension" && (
                         <div>
                           <h3 className="font-bold mb-2">Passage</h3>

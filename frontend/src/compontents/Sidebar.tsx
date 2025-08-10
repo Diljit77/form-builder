@@ -1,6 +1,6 @@
 // components/Sidebar.tsx
 import { Link, useLocation } from "react-router-dom";
-import { useThemeStore } from "../store/useAuthStore";
+import { useThemeStore } from "../store/usethemeStore";
 
 export default function Sidebar() {
   const location = useLocation();

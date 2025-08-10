@@ -10,8 +10,8 @@ import Response from "./pages/Response";
 
 import ViewResponse from "./pages/ViewResponse";
 
-
-const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
+import type { ReactNode } from 'react';
+const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   const token = localStorage.getItem("token");
   return token ? children : <Navigate to="/login" replace />;
 };

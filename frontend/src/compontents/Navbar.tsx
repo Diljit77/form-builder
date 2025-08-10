@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useThemeStore } from "../store/useAuthStore";
+import { useThemeStore } from "../store/usethemeStore";
 import ThemeSelector from "./ThemeSelector";
 
 export default function Navbar() {

@@ -1,17 +1,17 @@
 import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import API from "../api/axios";
-import { useThemeStore } from "../store/useAuthStore";
+import { useThemeStore } from "../store/usethemeStore";
 
 interface Responder {
   _id: string;
   name: string;
-  email: string;
+  email?: string;
 }
 
 interface RecentResponse {
   _id: string;
-  responder: Responder;
+  responder?: Responder; // Make responder optional
   submittedAt: string;
 }
 
@@ -23,6 +23,7 @@ interface FormWithResponses {
   updatedAt: string;
   responseCount: number;
   recentResponses: RecentResponse[];
+  hasResponded?: boolean; // Add hasResponded flag
 }
 
 export default function Dashboard() {
@@ -97,9 +98,10 @@ export default function Dashboard() {
                   <ul className="space-y-2">
                     {form.recentResponses.map((response) => (
                       <li key={response._id} className="flex items-center gap-2 text-sm">
-                
                         <div>
-                          <p className="font-medium">{response.responder.name}</p>
+                          <p className="font-medium">
+                            {response.responder?.name || "Anonymous"}
+                          </p>
                           <p className="text-xs text-gray-500">
                             {new Date(response.submittedAt).toLocaleString()}
                           </p>
@@ -119,10 +121,16 @@ export default function Dashboard() {
 
               <div className="card-actions justify-end mt-4">
                 <div className="flex flex-wrap gap-2">
-                  <Link to={`/form/${form._id}`} className="btn btn-sm btn-outline">
-                    Fill
-                  </Link>
-                  <Link to={`/responses`} className="btn btn-sm btn-secondary">
+                  {form.hasResponded ? (
+                    <button className="btn btn-sm btn-disabled" disabled>
+                      Already Responded
+                    </button>
+                  ) : (
+                    <Link to={`/form/${form._id}`} className="btn btn-sm btn-outline">
+                      Fill
+                    </Link>
+                  )}
+                  <Link to={`/responses/${form._id}`} className="btn btn-sm btn-secondary">
                     Responses
                   </Link>
                   <Link to={`/editor/${form._id}`} className="btn btn-sm btn-primary">

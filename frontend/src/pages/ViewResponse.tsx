@@ -1,14 +1,57 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import API from "../api/axios";
-import type { Form } from "../types/From";
+
+// Define your types
+interface Category {
+  id: string;
+  label: string;
+}
+
+interface Item {
+  id: string;
+  label: string;
+  belongsTo?: string;
+}
+
+interface SubQuestion {
+  id: string;
+  question: string;
+  options?: string[];
+}
+
+interface QuestionConfig {
+  categories?: Category[];
+  items?: Item[];
+  options?: string[];
+  textWithBlanks?: string;
+  passage?: string;
+  subQuestions?: SubQuestion[];
+  imageUrl?: string;
+}
 
 interface Question {
   qid: string;
-  type: string;
+  type: 'cloze' | 'categorize' | 'comprehension' | string;
   title: string;
-  config: any;
+  config: QuestionConfig;
 }
+
+interface AnswerItem {
+  id: string;
+  belongsTo: string;
+}
+
+interface AnswerSubQuestion {
+  id: string;
+  answer: string;
+}
+
+type AnswerValue = 
+  | string[] 
+  | { items: AnswerItem[] }
+  | { answers: AnswerSubQuestion[] }
+  | string;
 
 interface Responder {
   _id: string;
@@ -22,43 +65,58 @@ interface APIResponse {
     _id: string;
     title: string;
     description?: string;
+    headerImageUrl?: string;
+    questions?: Question[];
   };
   responder?: Responder;
   submittedAt: string;
   answers: {
     question: Question;
-    answer: any;
+    answer: AnswerValue;
   }[];
 }
 
+// Enhanced type guards
+const isStringArray = (answer: AnswerValue): answer is string[] => {
+  return Array.isArray(answer) && answer.every(item => typeof item === 'string');
+};
+
+const isAnswerItems = (answer: AnswerValue): answer is { items: AnswerItem[] } => {
+  return answer !== null && typeof answer === 'object' && 'items' in answer && Array.isArray((answer as any).items);
+};
+
+const isAnswerSubQuestions = (answer: AnswerValue): answer is { answers: AnswerSubQuestion[] } => {
+  return answer !== null && typeof answer === 'object' && 'answers' in answer && Array.isArray((answer as any).answers);
+};
+
+const isString = (answer: AnswerValue): answer is string => {
+  return typeof answer === 'string';
+};
+
+const getAnswerAsString = (answer: AnswerValue): string => {
+  if (isString(answer)) return answer;
+  if (isStringArray(answer)) return answer.join(', ');
+  return "Not answered";
+};
+
 export default function ViewResponse() {
-  const { id } = useParams(); // id = responseId from URL
-  const [form, setForm] = useState<Form | null>(null);
-  const [answers, setAnswers] = useState<Record<string, any>>({});
-  const [responder, setResponder] = useState<Responder | null>(null);
+  const { id } = useParams<{ id: string }>();
+  const [response, setResponse] = useState<APIResponse | null>(null);
+  const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
+  const [submittedDate, setSubmittedDate] = useState("");
 
   useEffect(() => {
     API.get<APIResponse>(`forms/responses/${id}`)
       .then((res) => {
-        const apiData = res.data;
-
-        // Build questions array from answers[].question
-        const questions = apiData.answers.map((a) => a.question);
-
-        // Merge into form object so form.questions is defined
-        setForm({
-          ...apiData.form,
-          questions,
-        } as Form);
-
-        // Set responder data if available
-        if (apiData.responder) {
-          setResponder(apiData.responder);
+        setResponse(res.data);
+        
+        if (res.data.submittedAt) {
+          const date = new Date(res.data.submittedAt);
+          setSubmittedDate(date.toLocaleString());
         }
 
-        // Map qid → answer value
-        const ansMap: Record<string, any> = {};
-        apiData.answers.forEach((a) => {
+        const ansMap: Record<string, AnswerValue> = {};
+        res.data.answers.forEach((a) => {
           ansMap[a.question.qid] = a.answer;
         });
         setAnswers(ansMap);
@@ -66,180 +124,229 @@ export default function ViewResponse() {
       .catch(() => alert("Response not found"));
   }, [id]);
 
-  if (!form) {
+  if (!response) {
     return <div className="text-center py-8">Loading response...</div>;
   }
 
   return (
     <div className="max-w-2xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-2">{form.title}</h1>
-      {form.description && (
-        <p className="text-gray-600 mb-6">{form.description}</p>
-      )}
+      {/* Header Section */}
+      <div className="mb-4">
+        {response.form.headerImageUrl && (
+          <div className="mb-4">
+            <img 
+              src={response.form.headerImageUrl} 
+              alt="Form header" 
+              className="w-full h-auto rounded-lg object-cover max-h-64"
+            />
+          </div>
+        )}
+        <h1 className="text-2xl font-bold mb-2">{response.form.title}</h1>
+        {response.form.description && (
+          <p className="text-gray-600 mb-6">{response.form.description}</p>
+        )}
+      </div>
 
-      {responder && (
-        <div className="mb-6">
-          <label className="block mb-1 font-medium">Responder</label>
-          <div className="space-y-2">
+      {/* Responder Info */}
+      <div className="mb-6">
+        <label className="block mb-1 font-medium">Responder</label>
+        <div className="space-y-2">
+          <input
+            className="input input-bordered w-full"
+            value={response.responder?.name || "Anonymous"}
+            readOnly
+          />
+          {response.responder?.email && (
             <input
               className="input input-bordered w-full"
-              value={responder.name}
+              value={response.responder.email}
               readOnly
             />
-            {responder.email && (
-              <input
-                className="input input-bordered w-full"
-                value={responder.email}
-                readOnly
-              />
-            )}
-          </div>
+          )}
         </div>
-      )}
+        <div className="mt-2">
+          <label className="block mb-1 font-medium">Submitted At</label>
+          <input
+            className="input input-bordered w-full"
+            value={submittedDate}
+            readOnly
+          />
+        </div>
+      </div>
 
-      {/* Rest of your component remains the same */}
+      {/* Questions & Answers */}
       <div className="space-y-6">
-        {form.questions.map((q) => (
-          <div key={q.qid} className="card bg-base-100 shadow">
-            <div className="card-body">
-              <h2 className="card-title">{q.title}</h2>
-
-              {/* Cloze Question - Show filled blanks */}
-              {q.type === "cloze" && (
-                <div className="mt-2">
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {q.config.options?.map((opt, i) => (
-                      <div
-                        key={i}
-                        className={`badge p-3 ${
-                          answers[q.qid]?.includes(opt) 
-                            ? 'badge-secondary' 
-                            : 'badge-outline opacity-50'
-                        }`}
-                      >
-                        {opt}
-                        {answers[q.qid]?.includes(opt) && (
-                          <span className="ml-1">✓</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  
-                  <div className="whitespace-pre-wrap">
-                    {q.config.textWithBlanks?.split('_____').map((part, i) => (
-                      <span key={i}>
-                        {part}
-                        {i < q.config.textWithBlanks.split('_____').length - 1 && (
-                          <span className="inline-flex items-center min-w-[100px] border-2 rounded p-1 mx-1 border-primary bg-primary bg-opacity-10">
-                            {answers[q.qid]?.[i] || (
-                              <span className="text-gray-400 italic">empty</span>
-                            )}
-                          </span>
-                        )}
-                      </span>
-                    ))}
-                  </div>
+        {response.answers.map(({ question: q }) => {
+          const answer = answers[q.qid] ?? "";
+          
+          return (
+            <div key={q.qid} className="card bg-base-100 shadow">
+              <div className="card-body">
+                {/* Question Header */}
+                <div className="mb-2">
+                  <h2 className="card-title">{q.title}</h2>
+                  {q.config.imageUrl && (
+                    <div className="mt-2">
+                      <img 
+                        src={q.config.imageUrl} 
+                        alt="Question" 
+                        className="w-full h-auto rounded-lg object-cover max-h-48"
+                      />
+                    </div>
+                  )}
                 </div>
-              )}
 
-              {/* Categorize Question - Show items with their categories */}
-              {q.type === "categorize" && (
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="font-medium mb-2">Categories:</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {q.config.categories?.map(cat => (
+                {/* Cloze Question */}
+                {q.type === "cloze" && (
+                  <div className="mt-2">
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {q.config.options?.map((opt, i) => (
                         <div
-                          key={cat.id}
-                          className="badge badge-primary p-3"
+                          key={i}
+                          className={`badge p-3 ${
+                            isStringArray(answer) && answer.includes(opt)
+                              ? 'badge-secondary' 
+                              : 'badge-outline opacity-50'
+                          }`}
                         >
-                          {cat.label}
+                          {opt}
+                          {isStringArray(answer) && answer.includes(opt) && (
+                            <span className="ml-1">✓</span>
+                          )}
                         </div>
                       ))}
                     </div>
+                    
+                    {q.config.textWithBlanks && (
+                      <div className="whitespace-pre-wrap">
+                        {q.config.textWithBlanks.split('_____').map((part, i) => (
+                          <span key={i}>
+                            {part}
+                            {i < q.config.textWithBlanks!.split('_____').length - 1 && (
+                              <span className="inline-flex items-center min-w-[100px] border-2 rounded p-1 mx-1 border-primary bg-primary bg-opacity-10">
+                                {isStringArray(answer) && answer[i] 
+                                  ? answer[i] 
+                                  : <span className="text-gray-400 italic">empty</span>}
+                              </span>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  
-                  <div>
-                    <h3 className="font-medium mb-2">Items:</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {q.config.items?.map(item => {
-                        const category = q.config.categories?.find(
-                          c => c.id === answers[q.qid]?.items?.find(
-                            (i: any) => i.id === item.id
-                          )?.belongsTo
+                )}
+
+                {/* Categorize Question */}
+                {q.type === "categorize" && (
+                  <div className="space-y-4">
+                    <div className="mt-6">
+                      <h3 className="font-bold text-lg mb-2">Items Categorized</h3>
+                      <div className="flex flex-wrap gap-3 p-4 bg-base-200 rounded-lg">
+                        {q.config.items?.filter(item => 
+                          isAnswerItems(answer) &&
+                          !answer.items.find(i => i.id === item.id && i.belongsTo)
+                        ).map(item => (
+                          <div
+                            key={item.id}
+                            className="badge badge-outline p-3 opacity-50"
+                          >
+                            {item.label}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    <h3 className="font-bold text-lg">Categories</h3>
+                    <div className="flex flex-wrap gap-4">
+                      {q.config.categories?.map(cat => {
+                        const categoryItems = q.config.items?.filter(item => 
+                          isAnswerItems(answer) &&
+                          answer.items.find(i => i.id === item.id && i.belongsTo === cat.id)
                         );
                         return (
                           <div
-                            key={item.id}
-                            className={`badge p-3 ${
-                              category ? 'badge-secondary' : 'badge-outline opacity-50'
-                            }`}
+                            key={cat.id}
+                            className="flex-1 min-w-[150px] max-w-[200px] border-2 border-primary rounded-lg p-3 bg-base-200 h-[150px] overflow-y-auto"
                           >
-                            {item.label}
-                            {category && (
-                              <span className="ml-2">→ {category.label}</span>
-                            )}
-                            {!category && (
-                              <span className="ml-2 text-xs opacity-70">(uncategorized)</span>
-                            )}
+                            <div className="font-medium text-center mb-2 sticky top-0 bg-base-200 pb-2">
+                              {cat.label}
+                            </div>
+                            <div className="flex flex-col gap-2">
+                              {categoryItems?.map(item => (
+                                <div
+                                  key={item.id}
+                                  className="badge badge-primary p-3 flex justify-between items-center"
+                                >
+                                  {item.label}
+                                  <span className="ml-1">✓</span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         );
                       })}
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Comprehension Question - Show passage and answers */}
-              {q.type === "comprehension" && (
-                <div className="space-y-4">
-                  <div className="p-3 rounded bg-base-200">
-                    {q.config.passage}
-                  </div>
-                  
-                  <div className="space-y-4">
-                    {q.config.subQuestions?.map((sq, i) => (
-                      <div key={i} className="space-y-2">
-                        <p className="font-medium">{sq.question}</p>
-                        <div className="p-2 border rounded bg-base-200">
-                          {sq.options ? (
-                            <select
-                              className="select select-bordered w-full bg-gray-100"
-                              value={answers[q.qid]?.answers?.[i]?.answer || ""}
-                              disabled
-                            >
-                              <option value="">{answers[q.qid]?.answers?.[i]?.answer || "Not answered"}</option>
-                              {sq.options.map((opt, j) => (
-                                <option key={j} value={opt}>{opt}</option>
-                              ))}
-                            </select>
-                          ) : (
-                            <input
-                              type="text"
-                              className="input input-bordered w-full bg-gray-100"
-                              value={answers[q.qid]?.answers?.[i]?.answer || "Not answered"}
-                              readOnly
-                            />
-                          )}
+                {/* Comprehension Question */}
+                {q.type === "comprehension" && (
+                  <div className="space-y-6">
+                    <div className="p-4 bg-base-200 rounded-lg">
+                      <p className="whitespace-pre-line">{q.config.passage}</p>
+                    </div>
+                    
+                    <div className="space-y-6">
+                      {q.config.subQuestions?.map((sq, i) => (
+                        <div key={i} className="space-y-3">
+                          <p className="font-medium text-lg">{sq.question}</p>
+                          <div className="space-y-2">
+                            {sq.options?.map((opt, j) => (
+                              <label key={j} className="flex items-center gap-3 p-3 rounded-lg">
+                                <input
+                                  type="radio"
+                                  name={`comprehension-${q.qid}-${i}`}
+                                  className="radio radio-primary"
+                                  checked={
+                                    isAnswerSubQuestions(answer) && 
+                                    answer.answers[i]?.answer === opt
+                                  }
+                                  readOnly
+                                />
+                                <span className={
+                                  isAnswerSubQuestions(answer) && 
+                                  answer.answers[i]?.answer === opt
+                                    ? "font-bold text-primary"
+                                    : ""
+                                }>
+                                  {opt}
+                                  {isAnswerSubQuestions(answer) && 
+                                  answer.answers[i]?.answer === opt && (
+                                    <span className="ml-1">✓</span>
+                                  )}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Default text input for other types */}
-              {!["cloze", "categorize", "comprehension"].includes(q.type) && (
-                <input
-                  type="text"
-                  className="input input-bordered w-full mt-2 bg-gray-100"
-                  value={answers[q.qid] || "Not answered"}
-                  readOnly
-                />
-              )}
+                {/* Default text input for other types */}
+                {!["cloze", "categorize", "comprehension"].includes(q.type) && (
+                  <input
+                    type="text"
+                    className="input input-bordered w-full mt-2 bg-gray-100"
+                    value={getAnswerAsString(answer)}
+                    readOnly
+                  />
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

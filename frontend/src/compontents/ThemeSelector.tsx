@@ -1,8 +1,6 @@
-import React from 'react'
-
 import { PaletteIcon } from 'lucide-react';
 import { THEMES } from '../constants';
-import { useThemeStore } from '../store/useAuthStore';
+import { useThemeStore } from '../store/usethemeStore';
 
 function ThemeSelector() {
  const {theme,setTheme}= useThemeStore();

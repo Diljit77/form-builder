@@ -8,44 +8,94 @@ export const createForm = async (req, res) => {
   try {
     const owner = req.userId;
     const payload = req.body;
-    if (!payload.title) return res.status(400).json({ error: 'Form title required' });
+
+    if (!payload.title) {
+      return res.status(400).json({ error: 'Form title required' });
+    }
+
+
+    if (!payload.headerImageUrl) delete payload.headerImageUrl;
+    payload.questions = payload.questions?.map(q => ({
+      ...q,
+      imageUrl: q.imageUrl || undefined
+    }));
 
     const form = new Form({ ...payload, owner });
     await form.save();
     res.status(201).json(form);
   } catch (err) {
-     console.log(err)
-   return res.status(500).json({ error: 'Server error' });
+    console.log(err);
+    return res.status(500).json({ error: 'Server error' });
   }
 };
+
+export const updateForm = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ error: 'Invalid form id' });
+    }
+
+    const payload = req.body;
+
+    // ✅ Same cleanup for update
+    if (!payload.headerImageUrl) delete payload.headerImageUrl;
+    payload.questions = payload.questions?.map(q => ({
+      ...q,
+      imageUrl: q.imageUrl || undefined
+    }));
+
+    const form = await Form.findOneAndUpdate(
+      { _id: id, owner: req.userId },
+      { ...payload, updatedAt: Date.now() },
+      { new: true }
+    );
+
+    if (!form) {
+      return res.status(403).json({ error: 'Not authorized or form not found' });
+    }
+    res.json(form);
+  } catch (err) {
+    console.log(err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
 export const getallUserForm = async (req, res) => {
   try {
-    const owner = req.userId;
+    const userId = req.userId;
     
-    // Get all forms for the user
-    const forms = await Form.find({ owner }).select('-__v').sort({ createdAt: -1 });
+ 
+    const forms = await Form.find({ owner: userId }).select('-__v').sort({ createdAt: -1 });
     
     if (!forms || forms.length === 0) {
       return res.status(404).json({ error: 'No forms found for this user' });
     }
 
-    // Get response statistics for each form
+
     const formsWithStats = await Promise.all(forms.map(async (form) => {
-      // Get total response count
+ 
       const responseCount = await FormResponse.countDocuments({ formId: form._id });
       
-      // Get most recent 2 responses
+    
       const recentResponses = await FormResponse.find({ formId: form._id })
         .sort({ submittedAt: -1 })
-        .limit(2)
+       
         .select('responder submittedAt')
-        .populate('responder', 'name email'); // Assuming responder is a User model with name/email
+        .populate('responder', 'name email');
+
+    
+      const hasResponded = await FormResponse.exists({ 
+        formId: form._id, 
+        responder: userId 
+      });
 
       return {
         ...form.toObject(),
         responseCount,
+        hasResponded,
         recentResponses: recentResponses.map(r => ({
-           _id: r._id, 
+          _id: r._id, 
           responder: r.responder,
           submittedAt: r.submittedAt
         }))
@@ -75,24 +125,6 @@ export const getForm = async (req, res) => {
   }
 };
 
-
-export const updateForm = async (req, res) => {
-  try {
-    const { id } = req.params;
-    if (!isValidObjectId(id)) return res.status(400).json({ error: 'Invalid form id' });
-
-    const form = await Form.findOneAndUpdate(
-      { _id: id, owner: req.userId },
-      { ...req.body, updatedAt: Date.now() },
-      { new: true }
-    );
-    if (!form) return res.status(403).json({ error: 'Not authorized or form not found' });
-    res.json(form);
-  } catch (err) {
-    console.log(err)
-  return  res.status(500).json({ error: 'Server error' });
-  }
-};
 
 
 export const submitResponse = async (req, res) => {
@@ -140,25 +172,23 @@ export const getAllResponsesByUser = async (req, res) => {
   try {
     const userId = req.userId;
 
-    // 1. Find forms owned by the logged-in user
     const forms = await Form.find({ owner: userId })
       .select("_id title description")
       .lean();
 
-    // 2. For each form, fetch responses and build recentResponses
     const formsWithResponses = await Promise.all(
       forms.map(async (form) => {
         const responses = await FormResponse.find({ formId: form._id })
-          .populate("responder", "name email") // ✅ no space, no _id here
+          .populate("responder", "name email")
           .sort({ submittedAt: -1 })
-          .limit(3) // last 3 responses
+          .limit(3) 
           .lean();
 
         return {
           ...form,
           responseCount: await FormResponse.countDocuments({ formId: form._id }),
           recentResponses: responses.map((r) => ({
-            _id: r._id, // ✅ ensure response ID is sent to frontend
+            _id: r._id, 
             responder: r.responder,
             submittedAt: r.submittedAt
           }))
@@ -183,31 +213,47 @@ export const getSingleResponse = async (req, res) => {
       return res.status(400).json({ error: 'Invalid response id' });
     }
 
-    const response = await FormResponse.findById(responseId).lean();
+    const response = await FormResponse.findById(responseId)
+      .populate('responder', 'name email')
+      .lean();
+    
     if (!response) return res.status(404).json({ error: 'Response not found' });
 
-    // Optional: ensure owner of form or responder can view
-    const form = await Form.findById(response.formId).select('title questions owner').lean();
+    const form = await Form.findById(response.formId)
+      .select('title description headerImageUrl questions owner')
+      .lean();
+    
     if (!form) return res.status(404).json({ error: 'Form not found' });
-    if (form.owner.toString() !== userId && response.responder.toString() !== userId) {
+    
+    if (form.owner.toString() !== userId && response.responder._id.toString() !== userId) {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
-    // Match answers to questions
     const detailedAnswers = response.answers.map(answer => {
       const question = form.questions.find(q => q.qid === answer.qid);
       return {
-        question: question || { qid: answer.qid, title: 'Question not found', type: 'unknown' },
+        question: question || { 
+          qid: answer.qid, 
+          title: 'Question not found', 
+          type: 'unknown',
+          imageUrl: null 
+        },
         answer: answer.value
       };
     });
 
     res.json({
       _id: response._id,
-      form: { _id: form._id, title: form.title },
-      responder: response.responder.name,
+      form: { 
+        _id: form._id, 
+        title: form.title,
+        description: form.description,
+        headerImageUrl: form.headerImageUrl 
+      },
+      responder: response.responder,
       submittedAt: response.submittedAt,
-      answers: detailedAnswers
+      answers: detailedAnswers,
+      questions: form.questions 
     });
   } catch (err) {
     console.error(err);

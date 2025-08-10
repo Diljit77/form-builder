@@ -1,17 +1,17 @@
 import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import API from "../api/axios";
-import { useThemeStore } from '../store/useAuthStore';
+import { useThemeStore } from '../store/usethemeStore';
 
 interface Responder {
   _id: string;
-  name: string;
-  email: string;
+  name?: string;
+  email?: string;
 }
 
 interface RecentResponse {
   _id: string;
-  responder: Responder;
+  responder?: Responder;
   submittedAt: string;
 }
 
@@ -63,47 +63,47 @@ function ResponsePage() {
     <div className="p-6 max-w-7xl mx-auto" data-theme={theme}>
       <h1 className="text-3xl font-bold mb-8">Responses</h1>
 
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="space-y-8"> {/* Changed from grid to space-y for better vertical spacing */}
         {forms.map((form) => (
-          <div key={form._id} className="card bg-base-100 shadow-lg hover:shadow-xl transition-all">
+          <div key={form._id} className="card bg-base-100 shadow-lg">
             <div className="card-body">
-              <div className="flex justify-between items-start">
-                <h2 className="card-title text-xl">{form.title}</h2>
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h2 className="card-title text-xl mb-1">{form.title}</h2>
+                  {form.description && (
+                    <p className="text-gray-500">{form.description}</p>
+                  )}
+                </div>
                 <div className="badge badge-info">
                   {form.responseCount} {form.responseCount === 1 ? "response" : "responses"}
                 </div>
               </div>
 
-              <p className="text-gray-500 mt-1 line-clamp-2">
-                {form.description || "No description provided"}
-              </p>
-
-              <div className="mt-4">
-                <h3 className="font-semibold mb-2">Recent Responses</h3>
+              <div className="border-t pt-4">
+                <h3 className="font-semibold mb-3">Recent Responses</h3>
                 {form.recentResponses.length > 0 ? (
-                  <ul className="space-y-3">
+                  <div className="space-y-3"> {/* Consistent spacing between responses */}
                     {form.recentResponses.map((response) => (
-                      <li key={response._id} className="flex justify-between items-center text-sm border p-2 rounded-lg">
-                        <div className="flex items-center gap-2">
-                      
-                          <div>
-                            <p className="font-medium">{response.responder.name}</p>
-                            <p className="text-xs text-gray-500">
-                              {new Date(response.submittedAt).toLocaleString()}
-                            </p>
-                          </div>
+                      <div key={response._id} className="flex justify-between items-center p-3 bg-base-200 rounded-lg">
+                        <div>
+                          <p className="font-medium">
+                            {response.responder?.name || "Anonymous"}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {new Date(response.submittedAt).toLocaleString()}
+                          </p>
                         </div>
                         <Link
                           to={`/response/${response._id}`}
-                          className="btn btn-xs btn-secondary"
+                          className="btn btn-sm btn-secondary"
                         >
-                          View Response
+                          View
                         </Link>
-                      </li>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 ) : (
-                  <div className="alert alert-warning py-2">
+                  <div className="alert alert-warning">
                     <span>No responses yet</span>
                   </div>
                 )}

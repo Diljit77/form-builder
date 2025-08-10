@@ -1,22 +1,49 @@
 import { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import API from "../api/axios";
-import type { Form } from "../types/From";
+import type { Form, Question } from "../types/From";
+
+type CategorizeAnswer = {
+  items: Array<{ id: string; belongsTo: string }>;
+};
+
+type ComprehensionAnswer = {
+  answers: Array<{ id: string; answer: string }>;
+};
+
+type ClozeAnswer = string[];
+
+type TextAnswer = string;
+
+type AnswerValue = CategorizeAnswer | ComprehensionAnswer | ClozeAnswer | TextAnswer;
+
+// Helper type guards
+function isCategorizeAnswer(answer: AnswerValue): answer is CategorizeAnswer {
+  return (answer as CategorizeAnswer).items !== undefined;
+}
+
+function isComprehensionAnswer(answer: AnswerValue): answer is ComprehensionAnswer {
+  return (answer as ComprehensionAnswer).answers !== undefined;
+}
+
+function isClozeAnswer(answer: AnswerValue): answer is ClozeAnswer {
+  return Array.isArray(answer);
+}
 
 export default function FillForm() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const [form, setForm] = useState<Form | null>(null);
-  const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
   const [responder, setResponder] = useState("");
   const [draggedItem, setDraggedItem] = useState<{ id: string; type: string; qid: string } | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    API.get(`/forms/${id}`)
+    API.get<Form>(`/forms/${id}`)
       .then((res) => {
         setForm(res.data);
-        // Initialize answers structure
-        const initialAnswers = {};
-        res.data.questions.forEach((q: any) => {
+        const initialAnswers: Record<string, AnswerValue> = {};
+        res.data.questions.forEach((q: Question) => {
           if (q.type === "categorize") {
             initialAnswers[q.qid] = {
               items: q.config.items?.map((item: any) => ({
@@ -54,9 +81,12 @@ export default function FillForm() {
     if (type === "category" && draggedItem.type === "item") {
       handleCategorizeChange(qid, draggedItem.id, targetId);
     } else if (type === "blank" && draggedItem.type === "option") {
-      const newAnswers = [...answers[qid]];
-      newAnswers[blankIndex!] = draggedItem.id;
-      handleAnswerChange(qid, newAnswers);
+      const answer = answers[qid];
+      if (isClozeAnswer(answer)) {
+        const newAnswers = [...answer];
+        newAnswers[blankIndex!] = draggedItem.id;
+        handleAnswerChange(qid, newAnswers);
+      }
     }
   };
 
@@ -64,13 +94,16 @@ export default function FillForm() {
     e.preventDefault();
   };
 
-  const handleAnswerChange = (qid: string, value: any) => {
+  const handleAnswerChange = (qid: string, value: AnswerValue) => {
     setAnswers(prev => ({ ...prev, [qid]: value }));
   };
 
   const handleCategorizeChange = (qid: string, itemId: string, categoryId: string) => {
     setAnswers(prev => {
-      const updatedItems = prev[qid].items.map((item: any) => 
+      const currentAnswer = prev[qid];
+      if (!isCategorizeAnswer(currentAnswer)) return prev;
+      
+      const updatedItems = currentAnswer.items.map(item => 
         item.id === itemId ? { ...item, belongsTo: categoryId } : item
       );
       return { ...prev, [qid]: { items: updatedItems } };
@@ -79,7 +112,10 @@ export default function FillForm() {
 
   const handleComprehensionChange = (qid: string, sqIndex: number, value: string) => {
     setAnswers(prev => {
-      const updatedAnswers = [...prev[qid].answers];
+      const currentAnswer = prev[qid];
+      if (!isComprehensionAnswer(currentAnswer)) return prev;
+      
+      const updatedAnswers = [...currentAnswer.answers];
       updatedAnswers[sqIndex] = { 
         ...updatedAnswers[sqIndex], 
         answer: value 
@@ -93,9 +129,12 @@ export default function FillForm() {
   };
 
   const removeClozeAnswer = (qid: string, index: number) => {
-    const newAnswers = [...answers[qid]];
-    newAnswers[index] = "";
-    handleAnswerChange(qid, newAnswers);
+    const answer = answers[qid];
+    if (isClozeAnswer(answer)) {
+      const newAnswers = [...answer];
+      newAnswers[index] = "";
+      handleAnswerChange(qid, newAnswers);
+    }
   };
 
   const handleSubmit = async () => {
@@ -105,8 +144,13 @@ export default function FillForm() {
         answers: Object.entries(answers).map(([qid, value]) => ({ qid, value }))
       });
       alert("Response submitted successfully!");
-    } catch (err: any) {
-      alert(err.response?.data?.error || "Submission failed");
+      navigate("/");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        alert(err.message);
+      } else {
+        alert("Submission failed");
+      }
     }
   };
 
@@ -114,10 +158,21 @@ export default function FillForm() {
 
   return (
     <div className="max-w-2xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-2">{form.title}</h1>
-      {form.description && (
-        <p className="text-gray-600 mb-6">{form.description}</p>
-      )}
+      <div className="mb-4">
+        {form.headerImageUrl && (
+          <div className="mb-4">
+            <img 
+              src={form.headerImageUrl} 
+              alt="Form header" 
+              className="w-full h-auto rounded-lg object-cover max-h-64"
+            />
+          </div>
+        )}
+        <h1 className="text-2xl font-bold mb-2">{form.title}</h1>
+        {form.description && (
+          <p className="text-gray-600 mb-6">{form.description}</p>
+        )}
+      </div>
 
       <div className="mb-6">
         <label className="block mb-1 font-medium">Your name (optional)</label>
@@ -133,62 +188,104 @@ export default function FillForm() {
         {form.questions.map((q) => (
           <div key={q.qid} className="card bg-base-100 shadow">
             <div className="card-body">
-              <h2 className="card-title">{q.title}</h2>
-              
-              {/* Cloze Question with Drag-and-Drop */}
-              {q.type === "cloze" && (
-                <div className="mt-2">
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {q.config.options?.map((opt, i) => (
-                      <div
-                        key={i}
-                        className={`badge p-3 cursor-move ${answers[q.qid]?.includes(opt) ? 'badge-secondary' : 'badge-outline'}`}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, opt, "option", q.qid)}
-                      >
-                        {opt}
-                      </div>
-                    ))}
+              <div className="mb-2">
+                <h2 className="card-title">{q.title}</h2>
+                {q.config.imageUrl && (
+                  <div className="mt-2">
+                    <img 
+                      src={q.config.imageUrl} 
+                      alt="Question" 
+                      className="w-full h-auto rounded-lg object-cover max-h-48"
+                    />
                   </div>
-                  
-                  <div className="whitespace-pre-wrap">
-                    {q.config.textWithBlanks?.split('_____').map((part, i) => (
-                      <span key={i}>
-                        {part}
-                        {i < q.config.textWithBlanks.split('_____').length - 1 && (
-                          <span
-                            className={`inline-flex items-center min-w-[100px] border-2 rounded p-1 mx-1 ${answers[q.qid]?.[i] ? 'border-success' : 'border-dashed border-base-300'}`}
-                            onDrop={(e) => handleDrop(e, i.toString(), "blank", q.qid, i)}
-                            onDragOver={handleDragOver}
-                          >
-                            {answers[q.qid]?.[i] && (
-                              <>
-                                <span>{answers[q.qid][i]}</span>
-                                <button 
-                                  className="ml-2 text-xs opacity-70 hover:text-error"
-                                  onClick={() => removeClozeAnswer(q.qid, i)}
-                                >
-                                  ✕
-                                </button>
-                              </>
-                            )}
-                          </span>
-                        )}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
+                )}
+              </div>
 
-              {/* Categorize Question with Side-by-Side Categories */}
+             {q.type === "cloze" && (
+  <div className="mt-2">
+    <div className="flex flex-wrap gap-2 mb-4">
+      {q.config.options?.map((opt: string, i: number) => {
+        const answer = answers[q.qid];
+        const isIncluded = isClozeAnswer(answer) ? answer.includes(opt) : false;
+        return (
+          <div
+            key={i}
+            className={`badge p-3 cursor-move ${isIncluded ? 'badge-secondary' : 'badge-outline'}`}
+            draggable
+            onDragStart={(e) => handleDragStart(e, opt, "option", q.qid)}
+          >
+            {opt}
+          </div>
+        );
+      })}
+    </div>
+    
+    {q.config.textWithBlanks && (
+      <div className="whitespace-pre-wrap">
+        {q.config.textWithBlanks.split('_____').map((part: string, i: number) => (
+          <span key={i}>
+            {part}
+            {i < (q.config.textWithBlanks?.split('_____').length ?? 1) - 1 && (
+              <span
+                className={`inline-flex items-center min-w-[100px] border-2 rounded p-1 mx-1 ${
+                  isClozeAnswer(answers[q.qid]) && (answers[q.qid] as ClozeAnswer)[i]
+                    ? 'border-success' 
+                    : 'border-dashed border-base-300'
+                }`}
+                onDrop={(e) => handleDrop(e, i.toString(), "blank", q.qid, i)}
+                onDragOver={handleDragOver}
+              >
+                {isClozeAnswer(answers[q.qid]) && (answers[q.qid] as ClozeAnswer)[i] && (
+                  <>
+                    <span>{(answers[q.qid] as ClozeAnswer)[i]}</span>
+                    <button 
+                      className="ml-2 text-xs opacity-70 hover:text-error"
+                      onClick={() => removeClozeAnswer(q.qid, i)}
+                    >
+                      ✕
+                    </button>
+                  </>
+                )}
+              </span>
+            )}
+          </span>
+        ))}
+      </div>
+    )}
+  </div>
+)}
+
+
               {q.type === "categorize" && (
                 <div className="space-y-4">
+                  <div className="mt-6">
+                    <h3 className="font-bold text-lg mb-2">Items to Categorize</h3>
+                    <div className="flex flex-wrap gap-3 p-4 bg-base-200 rounded-lg">
+                      {q.config.items?.filter((item: any) => {
+                        const answer = answers[q.qid];
+                        return !(isCategorizeAnswer(answer) && 
+                          answer.items.find((i: any) => i.id === item.id && i.belongsTo));
+                      }).map((item: any) => (
+                        <div
+                          key={item.id}
+                          className="badge badge-outline p-3 cursor-grab hover:bg-base-300 transition-colors"
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, item.id, "item", q.qid)}
+                        >
+                          {item.label}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                   <h3 className="font-bold text-lg">Categories</h3>
                   <div className="flex flex-wrap gap-4">
-                    {q.config.categories?.map(cat => {
-                      const categoryItems = q.config.items?.filter(item => 
-                        answers[q.qid]?.items?.find(i => i.id === item.id && i.belongsTo === cat.id)
-                      );
+                    {q.config.categories?.map((cat: any) => {
+                      const answer = answers[q.qid];
+                      const categoryItems = isCategorizeAnswer(answer) 
+                        ? q.config.items?.filter((item: any) => 
+                            answer.items.find((i: any) => i.id === item.id && i.belongsTo === cat.label)
+                          )
+                        : [];
                       return (
                         <div
                           key={cat.id}
@@ -200,7 +297,7 @@ export default function FillForm() {
                             {cat.label}
                           </div>
                           <div className="flex flex-col gap-2">
-                            {categoryItems?.map(item => (
+                            {categoryItems?.map((item: any) => (
                               <div
                                 key={item.id}
                                 className="badge badge-primary p-3 flex justify-between items-center"
@@ -219,28 +316,9 @@ export default function FillForm() {
                       );
                     })}
                   </div>
-                  
-                  <div className="mt-6">
-                    <h3 className="font-bold text-lg mb-2">Items to Categorize</h3>
-                    <div className="flex flex-wrap gap-3 p-4 bg-base-200 rounded-lg">
-                      {q.config.items?.filter(item => 
-                        !answers[q.qid]?.items?.find(i => i.id === item.id && i.belongsTo)
-                      ).map(item => (
-                        <div
-                          key={item.id}
-                          className="badge badge-outline p-3 cursor-grab hover:bg-base-300 transition-colors"
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, item.id, "item", q.qid)}
-                        >
-                          {item.label}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 </div>
               )}
 
-              {/* Comprehension as Standard MCQ */}
               {q.type === "comprehension" && (
                 <div className="space-y-6">
                   <div className="p-4 bg-base-200 rounded-lg">
@@ -248,35 +326,40 @@ export default function FillForm() {
                   </div>
                   
                   <div className="space-y-6">
-                    {q.config.subQuestions?.map((sq, i) => (
-                      <div key={i} className="space-y-3">
-                        <p className="font-medium text-lg">{sq.question}</p>
-                        <div className="space-y-2">
-                          {sq.options?.map((opt, j) => (
-                            <label key={j} className="flex items-center gap-3 p-3 hover:bg-base-200 rounded-lg cursor-pointer">
-                              <input
-                                type="radio"
-                                name={`comprehension-${q.qid}-${i}`}
-                                className="radio radio-primary"
-                                checked={answers[q.qid]?.answers?.[i]?.answer === opt}
-                                onChange={() => handleComprehensionChange(q.qid, i, opt)}
-                              />
-                              <span>{opt}</span>
-                            </label>
-                          ))}
+                    {q.config.subQuestions?.map((sq: any, i: any) => {
+                      const answer = answers[q.qid];
+                      const selectedAnswer = isComprehensionAnswer(answer) 
+                        ? answer.answers[i]?.answer 
+                        : "";
+                      return (
+                        <div key={i} className="space-y-3">
+                          <p className="font-medium text-lg">{sq.question}</p>
+                          <div className="space-y-2">
+                            {sq.options?.map((opt: any, j: any) => (
+                              <label key={j} className="flex items-center gap-3 p-3 hover:bg-base-200 rounded-lg cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name={`comprehension-${q.qid}-${i}`}
+                                  className="radio radio-primary"
+                                  checked={selectedAnswer === opt}
+                                  onChange={() => handleComprehensionChange(q.qid, i, opt)}
+                                />
+                                <span>{opt}</span>
+                              </label>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
-              {/* Default input for other types */}
               {!["cloze", "categorize", "comprehension"].includes(q.type) && (
                 <input
                   type="text"
                   className="input input-bordered w-full mt-2"
-                  value={answers[q.qid] || ""}
+                  value={typeof answers[q.qid] === 'string' ? answers[q.qid] as string : ""}
                   onChange={(e) => handleAnswerChange(q.qid, e.target.value)}
                 />
               )}
