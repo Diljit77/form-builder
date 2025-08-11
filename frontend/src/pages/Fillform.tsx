@@ -72,11 +72,23 @@ export default function FillForm() {
   const handleDragStart = (e: React.DragEvent, itemId: string, type: string, qid: string) => {
     setDraggedItem({ id: itemId, type, qid });
     e.dataTransfer.setData("text/plain", itemId);
+    e.dataTransfer.effectAllowed = "move";
+    
+    // Add visual feedback
+    const element = e.currentTarget as HTMLElement;
+    element.classList.add("dragging");
+    setTimeout(() => (element.style.opacity = "0.4"), 0);
   };
 
   const handleDrop = (e: React.DragEvent, targetId: string, type: string, qid: string, blankIndex?: number) => {
     e.preventDefault();
     if (!draggedItem) return;
+
+    // Reset drag visuals
+    document.querySelectorAll<HTMLElement>(".dragging").forEach(el => {
+      el.classList.remove("dragging");
+      el.style.opacity = "1";
+    });
 
     if (type === "category" && draggedItem.type === "item") {
       handleCategorizeChange(qid, draggedItem.id, targetId);
@@ -92,6 +104,15 @@ export default function FillForm() {
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    
+    // Add visual feedback for drop targets
+    const target = e.currentTarget as HTMLElement;
+    target.classList.add("drop-target");
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    (e.currentTarget as HTMLElement).classList.remove("drop-target");
   };
 
   const handleAnswerChange = (qid: string, value: AnswerValue) => {
@@ -158,6 +179,21 @@ export default function FillForm() {
 
   return (
     <div className="max-w-2xl mx-auto p-4">
+      <style>{`
+        .dragging {
+          transform: scale(1.05);
+          box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+          z-index: 1000;
+        }
+        .drop-target {
+          background-color: rgba(0,255,0,0.1);
+          border-color: #4CAF50 !important;
+        }
+        [data-draggable] {
+          transition: all 0.2s ease;
+        }
+      `}</style>
+
       <div className="mb-4">
         {form.headerImageUrl && (
           <div className="mb-4">
@@ -201,66 +237,75 @@ export default function FillForm() {
                 )}
               </div>
 
-             {q.type === "cloze" && (
-  <div className="mt-2">
-    <div className="flex flex-wrap gap-2 mb-4">
-      {q.config.options?.map((opt: string, i: number) => {
-        const answer = answers[q.qid];
-        const isIncluded = isClozeAnswer(answer) ? answer.includes(opt) : false;
-        return (
-          <div
-            key={i}
-            className={`badge p-3 cursor-move ${isIncluded ? 'badge-secondary' : 'badge-outline'}`}
-            draggable
-            onDragStart={(e) => handleDragStart(e, opt, "option", q.qid)}
-          >
-            {opt}
-          </div>
-        );
-      })}
-    </div>
-    
-    {q.config.textWithBlanks && (
-      <div className="whitespace-pre-wrap">
-        {q.config.textWithBlanks.split('_____').map((part: string, i: number) => (
-          <span key={i}>
-            {part}
-            {i < (q.config.textWithBlanks?.split('_____').length ?? 1) - 1 && (
-              <span
-                className={`inline-flex items-center min-w-[100px] border-2 rounded p-1 mx-1 ${
-                  isClozeAnswer(answers[q.qid]) && (answers[q.qid] as ClozeAnswer)[i]
-                    ? 'border-success' 
-                    : 'border-dashed border-base-300'
-                }`}
-                onDrop={(e) => handleDrop(e, i.toString(), "blank", q.qid, i)}
-                onDragOver={handleDragOver}
-              >
-                {isClozeAnswer(answers[q.qid]) && (answers[q.qid] as ClozeAnswer)[i] && (
-                  <>
-                    <span>{(answers[q.qid] as ClozeAnswer)[i]}</span>
-                    <button 
-                      className="ml-2 text-xs opacity-70 hover:text-error"
-                      onClick={() => removeClozeAnswer(q.qid, i)}
-                    >
-                      ✕
-                    </button>
-                  </>
-                )}
-              </span>
-            )}
-          </span>
-        ))}
-      </div>
-    )}
-  </div>
-)}
-
+              {q.type === "cloze" && (
+                <div className="mt-2">
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {q.config.options?.map((opt: string, i: number) => {
+                      const answer = answers[q.qid];
+                      const isIncluded = isClozeAnswer(answer) ? answer.includes(opt) : false;
+                      return (
+                        <div
+                          key={i}
+                          className={`badge p-3 cursor-move transition-all ${
+                            isIncluded ? 'badge-secondary opacity-50' : 'badge-outline hover:bg-base-200'
+                          }`}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, opt, "option", q.qid)}
+                          onDragEnd={() => {
+                            document.querySelectorAll<HTMLElement>(".dragging").forEach(el => {
+                              el.classList.remove("dragging");
+                              el.style.opacity = "1";
+                            });
+                          }}
+                          data-draggable
+                        >
+                          {opt}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  
+                  {q.config.textWithBlanks && (
+                    <div className="whitespace-pre-wrap">
+                      {q.config.textWithBlanks.split('_____').map((part: string, i: number) => (
+                        <span key={i}>
+                          {part}
+                          {i < (q.config.textWithBlanks?.split('_____').length ?? 1) - 1 && (
+                            <span
+                              className={`inline-flex items-center min-w-[100px] border-2 rounded p-1 mx-1 transition-colors ${
+                                isClozeAnswer(answers[q.qid]) && (answers[q.qid] as ClozeAnswer)[i]
+                                  ? 'border-success bg-success/10' 
+                                  : 'border-dashed border-base-300 hover:border-primary'
+                              }`}
+                              onDrop={(e) => handleDrop(e, i.toString(), "blank", q.qid, i)}
+                              onDragOver={handleDragOver}
+                              onDragLeave={handleDragLeave}
+                            >
+                              {isClozeAnswer(answers[q.qid]) && (answers[q.qid] as ClozeAnswer)[i] && (
+                                <>
+                                  <span>{(answers[q.qid] as ClozeAnswer)[i]}</span>
+                                  <button 
+                                    className="ml-2 text-xs opacity-70 hover:text-error"
+                                    onClick={() => removeClozeAnswer(q.qid, i)}
+                                  >
+                                    ✕
+                                  </button>
+                                </>
+                              )}
+                            </span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {q.type === "categorize" && (
                 <div className="space-y-4">
                   <div className="mt-6">
                     <h3 className="font-bold text-lg mb-2">Items to Categorize</h3>
-                    <div className="flex flex-wrap gap-3 p-4 bg-base-200 rounded-lg">
+                    <div className="flex flex-wrap gap-3 p-4 bg-base-200 rounded-lg min-h-[80px]">
                       {q.config.items?.filter((item: any) => {
                         const answer = answers[q.qid];
                         return !(isCategorizeAnswer(answer) && 
@@ -268,9 +313,16 @@ export default function FillForm() {
                       }).map((item: any) => (
                         <div
                           key={item.id}
-                          className="badge badge-outline p-3 cursor-grab hover:bg-base-300 transition-colors"
+                          className="badge badge-outline p-3 cursor-grab hover:bg-base-300 transition-all"
                           draggable
                           onDragStart={(e) => handleDragStart(e, item.id, "item", q.qid)}
+                          onDragEnd={() => {
+                            document.querySelectorAll<HTMLElement>(".dragging").forEach(el => {
+                              el.classList.remove("dragging");
+                              el.style.opacity = "1";
+                            });
+                          }}
+                          data-draggable
                         >
                           {item.label}
                         </div>
@@ -289,9 +341,10 @@ export default function FillForm() {
                       return (
                         <div
                           key={cat.id}
-                          className="flex-1 min-w-[150px] max-w-[200px] border-2 border-primary rounded-lg p-3 bg-base-200 h-[150px] overflow-y-auto"
-                          onDrop={(e) => handleDrop(e, cat.id, "category", q.qid)}
+                          className="flex-1 min-w-[150px] max-w-[200px] border-2 border-primary rounded-lg p-3 bg-base-200 h-[150px] overflow-y-auto transition-colors"
+                          onDrop={(e) => handleDrop(e, cat.label, "category", q.qid)}
                           onDragOver={handleDragOver}
+                          onDragLeave={handleDragLeave}
                         >
                           <div className="font-medium text-center mb-2 sticky top-0 bg-base-200 pb-2">
                             {cat.label}

@@ -261,7 +261,7 @@ export default function ViewResponse() {
                       {q.config.categories?.map(cat => {
                         const categoryItems = q.config.items?.filter(item => 
                           isAnswerItems(answer) &&
-                          answer.items.find(i => i.id === item.id && i.belongsTo === cat.id)
+                          answer.items.find(i => i.id === item.id && i.belongsTo === cat.label)
                         );
                         return (
                           <div

@@ -130,7 +130,7 @@ export default function Dashboard() {
                       Fill
                     </Link>
                   )}
-                  <Link to={`/responses/${form._id}`} className="btn btn-sm btn-secondary">
+                  <Link to={`/responses`} className="btn btn-sm btn-secondary">
                     Responses
                   </Link>
                   <Link to={`/editor/${form._id}`} className="btn btn-sm btn-primary">

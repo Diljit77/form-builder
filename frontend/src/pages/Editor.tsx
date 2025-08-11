@@ -144,13 +144,13 @@ export default function Editor() {
 
     const config = { ...form.questions[qIndex].config };
 
-    if (listType === "cats") {
-      if (!config.categories) return;
-      config.categories = reorder(config.categories, source.index, destination.index);
-    } else if (listType === "items") {
-      if (!config.items) return;
-      config.items = reorder(config.items, source.index, destination.index);
-    } else if (listType === "clozeOpts") {
+ if (listType === "categories") {
+  if (!config.categories) return;
+  config.categories = reorder(config.categories, source.index, destination.index);
+} else if (listType === "items") {
+  if (!config.items) return;
+  config.items = reorder(config.items, source.index, destination.index);
+} else if (listType === "clozeOpts") {
       if (!config.options) return;
       config.options = reorder(config.options, source.index, destination.index);
     } else if (listType === "compQs") {
@@ -211,6 +211,7 @@ export default function Editor() {
         navigate(`/editor/${res.data._id}`);
       }
       alert("Form saved!");
+      navigate("/")
     } catch (err: any) {
       alert(err.response?.data?.error || "Save failed");
     } finally {
@@ -391,37 +392,35 @@ export default function Editor() {
                         <div className="space-y-4">
                           <div>
                             <h3 className="font-bold mb-2">Categories</h3>
-                            <Droppable droppableId={`cats::${q.qid}`} type="categories">
-                              {(provided) => (
-                                <div 
-                                  ref={provided.innerRef} 
-                                  {...provided.droppableProps}
-                                  className="space-y-2 bg-base-200 p-3 rounded-lg min-h-[60px]"
-                                >
-                                  {(q.config.categories || []).map((cat: any, catIndex: number) => (
-                                    <Draggable 
-                                      key={`cat-${cat.id}`} 
-                                      draggableId={`cat-${cat.id}`} 
-                                      index={catIndex}
-                                    >
-                                      {(provided, snapshot) => (
-                                        <div
-                                          ref={provided.innerRef}
-                                          {...provided.draggableProps}
-                                          style={{
-                                            ...provided.draggableProps.style,
-                                            transform: snapshot.isDragging 
-                                              ? 'scale(1.02) rotate(1deg)' 
-                                              : 'none',
-                                            transition: 'all 0.2s ease',
-                                          }}
-                                          className={`flex items-center gap-2 p-2 rounded-lg ${
-                                            snapshot.isDragging 
-                                              ? 'bg-primary/20 border border-primary shadow-lg' 
-                                              : 'bg-base-100 border border-base-300'
-                                          }`}
-                                        >
-                                          <div 
+                           <Droppable droppableId={`categories::${q.qid}`} type="categories">
+  {(provided) => (
+    <div 
+      ref={provided.innerRef} 
+      {...provided.droppableProps}
+      className="space-y-2 bg-base-200 p-3 rounded-lg min-h-[60px]"
+            style={{ maxHeight: 'calc(100vh - 300px)', overflowY: 'auto' }}
+    >
+      {(q.config.categories || []).map((cat: any, catIndex: number) => (
+<Draggable 
+  key={`cat-${cat.id}`} 
+  draggableId={`cat-${cat.id}`} 
+  index={catIndex}
+>
+  {(provided, snapshot) => (
+    <div
+      ref={provided.innerRef}
+      {...provided.draggableProps}
+      style={{
+        ...provided.draggableProps.style,
+        boxShadow: snapshot.isDragging ? "0 0 8px rgba(0,0,0,0.3)" : "none",
+        backgroundColor: snapshot.isDragging ? 'var(--fallback-b1,oklch(var(--b1)/1))' : '',
+        zIndex: snapshot.isDragging ? 1000 : 'auto',
+      }}
+      className={`flex items-center gap-2 p-2 rounded-lg border transition-all duration-200 ${
+        snapshot.isDragging ? 'ring-2 ring-primary bg-primary/20' : 'bg-base-100 border-base-300'
+      }`}
+    >
+          <div 
                                             {...provided.dragHandleProps} 
                                             className="cursor-move p-1 hover:bg-base-300 rounded"
                                           >
@@ -483,28 +482,25 @@ export default function Editor() {
                                   className="space-y-2 bg-base-200 p-3 rounded-lg min-h-[60px]"
                                 >
                                   {(q.config.items || []).map((item: any, itemIndex: number) => (
-                                    <Draggable 
-                                      key={`item-${item.id}`} 
-                                      draggableId={`item-${item.id}`} 
-                                      index={itemIndex}
-                                    >
-                                      {(provided, snapshot) => (
-                                        <div
-                                          ref={provided.innerRef}
-                                          {...provided.draggableProps}
-                                          style={{
-                                            ...provided.draggableProps.style,
-                                            transform: snapshot.isDragging 
-                                              ? 'scale(1.02) rotate(1deg)' 
-                                              : 'none',
-                                            transition: 'all 0.2s ease',
-                                          }}
-                                          className={`flex items-center gap-2 p-2 rounded-lg ${
-                                            snapshot.isDragging 
-                                              ? 'bg-primary/20 border border-primary shadow-lg' 
-                                              : 'bg-base-100 border border-base-300'
-                                          }`}
-                                        >
+                             <Draggable 
+  key={`item-${item.id}`} 
+  draggableId={`item-${item.id}`} 
+  index={itemIndex}
+>
+  {(provided, snapshot) => (
+    <div
+      ref={provided.innerRef}
+      {...provided.draggableProps}
+      style={{
+        ...provided.draggableProps.style,
+        boxShadow: snapshot.isDragging ? "0 0 8px rgba(0,0,0,0.3)" : "none",
+        backgroundColor: snapshot.isDragging ? 'var(--fallback-b1,oklch(var(--b1)/1))' : '',
+        zIndex: snapshot.isDragging ? 1000 : 'auto',
+      }}
+      className={`flex items-center gap-2 p-2 rounded-lg border transition-all duration-200 ${
+        snapshot.isDragging ? 'ring-2 ring-primary bg-primary/20' : 'bg-base-100 border-base-300'
+      }`}
+    >
                                           <div 
                                             {...provided.dragHandleProps} 
                                             className="cursor-move p-1 hover:bg-base-300 rounded"
@@ -630,28 +626,28 @@ export default function Editor() {
                                 className="space-y-2 bg-base-200 p-3 rounded-lg min-h-[60px]"
                               >
                                 {(q.config.options || []).map((opt: string, optIndex: number) => (
-                                  <Draggable 
-                                    key={`opt-${q.qid}-${optIndex}`} 
-                                    draggableId={`opt-${q.qid}-${optIndex}`} 
-                                    index={optIndex}
-                                  >
-                                    {(provided, snapshot) => (
-                                      <div
-                                        ref={provided.innerRef}
-                                        {...provided.draggableProps}
-                                        style={{
-                                          ...provided.draggableProps.style,
-                                          transform: snapshot.isDragging 
-                                            ? 'scale(1.02) rotate(1deg)' 
-                                            : 'none',
-                                          transition: 'all 0.2s ease',
-                                        }}
-                                        className={`flex items-center gap-2 p-2 rounded-lg ${
-                                          snapshot.isDragging 
-                                            ? 'bg-primary/20 border border-primary shadow-lg' 
-                                            : 'bg-base-100 border border-base-300'
-                                        }`}
-                                      >
+                                 <Draggable 
+          key={`opt-${q.qid}-${optIndex}`} 
+          draggableId={`opt-${q.qid}-${optIndex}`} 
+          index={optIndex}
+        >
+          {(provided, snapshot) => (
+            <div
+              ref={provided.innerRef}
+              {...provided.draggableProps}
+              style={{
+                ...provided.draggableProps.style,
+                boxShadow: snapshot.isDragging ? "0 0 8px rgba(0,0,0,0.3)" : "none",
+                backgroundColor: snapshot.isDragging ? 'var(--fallback-b1,oklch(var(--b1)/1))' : '',
+                zIndex: snapshot.isDragging ? 1000 : 'auto',
+                willChange: 'transform',
+              }}
+              className={`flex items-center gap-2 p-2 rounded-lg border transition-all duration-200 ${
+                snapshot.isDragging 
+                  ? 'ring-2 ring-primary bg-primary/20' 
+                  : 'bg-base-100 border-base-300'
+              }`}
+            >
                                         <div 
                                           {...provided.dragHandleProps} 
                                           className="cursor-move p-1 hover:bg-base-300 rounded"
